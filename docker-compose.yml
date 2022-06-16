@@ -1,0 +1,119 @@
+version: "3.7"
+
+volumes:
+  grafana-data:
+  loki-data:
+  prometheus-data:
+
+services:
+  grafana:
+    image: grafana/grafana:8.0.6
+    container_name: grafana
+    restart: unless-stopped
+    volumes:
+    - grafana-data:/var/lib/grafana
+    ports:
+    - 3000:3000
+
+  loki:
+    image: grafana/loki:2.0.0
+    container_name: loki
+    restart: unless-stopped
+    volumes:
+    - ./loki-config.yml:/mnt/config/loki-config.yml
+    - loki-data:/loki
+    ports:
+    - 3100:3100
+    command: 
+    - '-config.file=/mnt/config/loki-config.yml'
+
+  nginx:
+    image: nginx
+    container_name: nginx
+    restart: unless-stopped
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"  
+    ports:
+    - 80:80
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11
+    restart: unless-stopped
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+    ports:
+    - 8080:8080
+    - 50000:50000    
+  
+  prometheus:   
+    image: ubuntu/prometheus
+    restart: unless-stopped
+    volumes:
+    - ./prometheus.yml/prometheus.yml:/etc/prometheus/prometheus.yml #punta a un archivo local 
+    - prometheus-data:/prometheus
+    command:
+    - '--config.file=/etc/prometheus/prometheus.yml'
+    - '--storage.tsdb.path=/prometheus'
+    - '--storage.tsdb.retention.time=1y'
+    - '--web.enable-lifecycle'
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+    ports:
+    - 9090:9090     
+
+  #node_exporter:
+   # image: quay.io/prometheus/node-exporter:latest
+   # container_name: node_exporter
+    #restart: unless-stopped
+    #logging:
+    #  driver: loki
+    #  options:
+    #  loki-url: "http://localhost:3100/loki/api/v1/push"
+    #ports:
+    #- 9100:9100 
+
+  mysql:
+    image: mysql:5.7
+    restart: unless-stopped
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push" 
+    ports:
+      - "33060:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: myRootPassword82
+      MYSQL_DATABASE: DevOps
+      MYSQL_USER: mypy
+      MYSQL_PASSWORD: myPass22
+
+  gitlab:
+    image: 'gitlab/gitlab-ce:latest'
+    restart: unless-stopped
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+    ports:
+     - "8083:80"
+# Persistencia de datos
+    volumes:
+     - "/srv/gitlab/config:/etc/gitlab"
+     - "/srv/gitlab/logs:/var/log/gitlab"
+     - "/srv/gitlab/data:/var/opt/gitlab"
+
+  sonarqube:
+    image: sonarqube
+    restart: unless-stopped
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+    ports:
+     - "9000:9000"
